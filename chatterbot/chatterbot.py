@@ -1,7 +1,7 @@
 import logging
 from chatterbot.storage import StorageAdapter
 from chatterbot.logic import LogicAdapter
-from chatterbot.search import IndexedTextSearch
+from chatterbot.search import TextSearch, IndexedTextSearch
 from chatterbot import utils
 
 
@@ -12,12 +12,6 @@ class ChatBot(object):
 
     def __init__(self, name, **kwargs):
         self.name = name
-
-        primary_search_algorithm = IndexedTextSearch(self, **kwargs)
-
-        self.search_algorithms = {
-            primary_search_algorithm.name: primary_search_algorithm
-        }
 
         storage_adapter = kwargs.get('storage_adapter', 'chatterbot.storage.SQLStorageAdapter')
 
@@ -32,6 +26,14 @@ class ChatBot(object):
         self.logic_adapters = []
 
         self.storage = utils.initialize_class(storage_adapter, **kwargs)
+
+        primary_search_algorithm = IndexedTextSearch(self, **kwargs)
+        text_search_algorithm = TextSearch(self, **kwargs)
+
+        self.search_algorithms = {
+            primary_search_algorithm.name: primary_search_algorithm,
+            text_search_algorithm.name: text_search_algorithm
+        }
 
         for adapter in logic_adapters:
             utils.validate_adapter_class(adapter, LogicAdapter)
@@ -53,29 +55,6 @@ class ChatBot(object):
 
         # Allow the bot to save input it receives so that it can learn
         self.read_only = kwargs.get('read_only', False)
-
-        if kwargs.get('initialize', True):
-            self.initialize()
-
-    def get_initialization_functions(self):
-        initialization_functions = utils.get_initialization_functions(
-            self, 'storage.tagger'
-        )
-
-        for search_algorithm in self.search_algorithms.values():
-            search_algorithm_functions = utils.get_initialization_functions(
-                search_algorithm, 'compare_statements'
-            )
-            initialization_functions.update(search_algorithm_functions)
-
-        return initialization_functions
-
-    def initialize(self):
-        """
-        Do any work that needs to be done before the chatbot can process responses.
-        """
-        for function in self.get_initialization_functions().values():
-            function()
 
     def get_response(self, statement=None, **kwargs):
         """
@@ -129,10 +108,10 @@ class ChatBot(object):
         # Make sure the input statement has its search text saved
 
         if not input_statement.search_text:
-            input_statement.search_text = self.storage.tagger.get_bigram_pair_string(input_statement.text)
+            input_statement.search_text = self.storage.tagger.get_text_index_string(input_statement.text)
 
         if not input_statement.search_in_response_to and input_statement.in_response_to:
-            input_statement.search_in_response_to = self.storage.tagger.get_bigram_pair_string(input_statement.in_response_to)
+            input_statement.search_in_response_to = self.storage.tagger.get_text_index_string(input_statement.in_response_to)
 
         response = self.generate_response(input_statement, additional_response_selection_parameters)
 
